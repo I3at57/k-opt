@@ -1,0 +1,225 @@
+# Générer le TSP
+
+```{r}
+library(ggplot2)
+library(magrittr)
+library(ggrepel)
+library(ggpubr)
+```
+
+
+```{r}
+calcul_distancier <- function(nodes) {
+	n <- dim(nodes)[1]
+	D <- matrix(nrow = n, ncol = n)
+	for (i in 1:n) {
+		for (j in 1:n) {
+			if (i == j) {
+				D[i,j] <- Inf
+			} else {
+				D[i,j] <- sqrt(
+					(nodes[i,"x"]-nodes[j,"x"])^2 +
+						(nodes[i,"y"]-nodes[j,"y"])^2
+				)
+			}
+		}
+	}
+	colnames(D) <- as.character(1:n)
+	rownames(D) <- as.character(1:n)
+	return(D)
+}
+```
+```{r}
+generer_TSP <- function(
+		n = 10,
+		xlim = c(0,100),
+		ylim = c(0,100),
+		warehouse = 1
+) {
+	TSP <- list()
+	node_coord <- c()
+	for (i in 1:n) {
+		node_coord <- append(
+			node_coord,
+			c(sample(x = xlim[1]:xlim[2], size = 1),
+			  sample(x = ylim[1]:ylim[2], size = 1))
+		)
+	}
+	node_coord <- matrix(node_coord, ncol = 2, byrow = TRUE)
+	colnames(node_coord) <- c("x", "y")
+	rownames(node_coord) <- as.character(1:n)
+	TSP$nodes <- node_coord
+	TSP$warehouse <- warehouse
+	TSP$D <- calcul_distancier(node_coord)
+
+	return(TSP)
+}
+```
+
+# Afficher le problème
+
+```{r}
+afficher_plan <- function(TSP) {
+	p <- ggplot() + 
+		geom_point(aes(x = as.vector(TSP$nodes[,"x"]),
+					   y = as.vector(TSP$nodes[,"y"]),
+					   size = 5,
+					   color = 'blue'),
+				   label = rownames(TSP$nodes)) +
+		geom_point(aes(x = TSP$nodes[1,"x"],
+					   y = TSP$nodes[1,"y"],
+					   color = 'red',
+					   size = 5)) +
+		theme(legend.position="none") +
+		labs(x = "x", y = "y")
+	return(p)
+}
+```
+```{r}
+afficher_tournee <- function(TSP, T) {
+	p <- afficher_plan(TSP)
+	edges_list <- c()
+	for (i in 1:(length(T)-1)) {
+		x <- c(TSP$nodes[as.numeric(T[i]),"x"], TSP$nodes[as.numeric(T[i+1]),"x"])
+		y <- c(TSP$nodes[as.numeric(T[i]),"y"], TSP$nodes[as.numeric(T[i+1]),"y"])
+		#print(x);print(y)
+		loop_input = paste(
+			"geom_line(aes(x = c(",
+			x[1],", ",x[2],")",
+			", y = c(",
+			y[1],", ",y[2],")",
+			", color = 'black'))",
+			sep = ""
+		)
+		p <- p + eval(parse(text = loop_input))
+	}
+	return(p)
+}
+```
+
+
+# PPV
+
+```{r}
+# Calculer le PPV à partir d'un TSP
+# Renvoi une liste T avec l'ordre des noeuds visités
+
+PPV <- function(TSP) {
+	current <- TSP$warehouse
+	T <- c(current)
+	nodes <- rownames(TSP$nodes)[rownames(TSP$nodes) != current]
+	while (length(nodes) > 0) {
+		current <- nodes[which(TSP$D[current,nodes] == min(TSP$D[current,nodes]))]
+		T <- append(T, current)
+		nodes <- nodes[nodes != current]
+	}
+	T <- append(T, TSP$warehouse)
+	return(T)
+}
+
+```
+
+# 2-opt
+```{r}
+swap_edges <- function(T, u, v) {
+	# print(u); print(v); print(T)
+	i = which(T[1:(length(T)-1)] == u)
+	j = which(T[1:(length(T)-1)] == v)
+	# print(i); print(j)
+	while (j > i) {
+		mid <- T[j]
+		T[j] <- T[i]
+		T[i] <- mid
+		i = i + 1
+		j = j - 1
+	}
+	return(T)
+}
+```
+
+```{r}
+deux_opt <- function(TSP, T, nbrmax = 1000) {
+	
+	n <- dim(TSP$nodes)[1]
+	# print(T)
+	SWAP <- TRUE
+	nbr = 0
+	while (SWAP & nbr < nbrmax + 1) {
+		SWAP <- FALSE
+		for (i in 2:(n-2)) {
+			for (j in (i+1):(n-1)) {
+		
+				delta <- -TSP$D[T[i-1],T[i]]-TSP$D[T[j],T[j+1]]+
+				TSP$D[T[i-1],T[j]] + TSP$D[T[i],T[j+1]]
+				# print(paste("i = ",i,", j = ",j,", delta = ",delta))
+				if (delta < 0) {
+					SWAP = TRUE
+					nbr = nbr + 1
+					T <- swap_edges(T, T[i], T[j])
+					# print(T)
+				}
+			}
+		}
+	}
+	
+	return(T)
+}
+```
+
+# Calcul cout
+
+```{r}
+calcul_cout <- function(TSP, T) {
+	sum <- 0
+	for (i in 1:(length(T)-1)) {
+		sum <- sum + TSP$D[as.numeric(T[i]),as.numeric(T[i+1])]
+	}
+	return(sum)
+}
+```
+
+
+# Exemple
+
+```{r}
+tsp <- generer_TSP()
+afficher_plan(tsp)
+```
+
+```{r}
+T <- PPV(tsp)
+```
+```{r}
+afficher_tournee(tsp, T)
+```
+
+```{r}
+T
+```
+
+
+```{r}
+deux_opt(tsp, T)
+```
+```{r}
+afficher_tournee(tsp, deux_opt(tsp, T))
+```
+
+```{r}
+tsp <- generer_TSP()
+T <- PPV(tsp)
+a <- afficher_tournee(tsp, T)
+T2 <- deux_opt(tsp, T, nbrmax = Inf)
+b <- afficher_tournee(tsp, T2)
+```
+
+```{r}
+figure <- ggarrange(a, b, ncol = 2, nrow = 1)
+figure
+```
+
+```{r}
+calcul_cout(tsp, T)
+calcul_cout(tsp, T2)
+```
+
