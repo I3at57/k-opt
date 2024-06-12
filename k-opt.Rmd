@@ -6,74 +6,14 @@ library(magrittr)
 library(ggrepel)
 library(ggpubr)
 ```
-
-
 ```{r}
-calcul_distancier <- function(nodes) {
-	n <- dim(nodes)[1]
-	D <- matrix(nrow = n, ncol = n)
-	for (i in 1:n) {
-		for (j in 1:n) {
-			if (i == j) {
-				D[i,j] <- Inf
-			} else {
-				D[i,j] <- sqrt(
-					(nodes[i,"x"]-nodes[j,"x"])^2 +
-						(nodes[i,"y"]-nodes[j,"y"])^2
-				)
-			}
-		}
-	}
-	colnames(D) <- as.character(1:n)
-	rownames(D) <- as.character(1:n)
-	return(D)
-}
-```
-```{r}
-generer_TSP <- function(
-		n = 10,
-		xlim = c(0,100),
-		ylim = c(0,100),
-		warehouse = 1
-) {
-	TSP <- list()
-	node_coord <- c()
-	for (i in 1:n) {
-		node_coord <- append(
-			node_coord,
-			c(sample(x = xlim[1]:xlim[2], size = 1),
-			  sample(x = ylim[1]:ylim[2], size = 1))
-		)
-	}
-	node_coord <- matrix(node_coord, ncol = 2, byrow = TRUE)
-	colnames(node_coord) <- c("x", "y")
-	rownames(node_coord) <- as.character(1:n)
-	TSP$nodes <- node_coord
-	TSP$warehouse <- warehouse
-	TSP$D <- calcul_distancier(node_coord)
 
-	return(TSP)
-}
 ```
 
 # Afficher le problème
 
 ```{r}
-afficher_plan <- function(TSP) {
-	p <- ggplot() + 
-		geom_point(aes(x = as.vector(TSP$nodes[,"x"]),
-					   y = as.vector(TSP$nodes[,"y"]),
-					   size = 5,
-					   color = 'blue'),
-				   label = rownames(TSP$nodes)) +
-		geom_point(aes(x = TSP$nodes[1,"x"],
-					   y = TSP$nodes[1,"y"],
-					   color = 'red',
-					   size = 5)) +
-		theme(legend.position="none") +
-		labs(x = "x", y = "y")
-	return(p)
-}
+
 ```
 ```{r}
 afficher_tournee <- function(TSP, T) {
@@ -178,8 +118,80 @@ calcul_cout <- function(TSP, T) {
 }
 ```
 
+```{r}
+enveloppe_convexe <- function(TSP, info = FALSE) {
+	
+	# Sort une liste de noeud faisant le tour de l'enveloppe convexe
+	# # On a les infos suivantes :
+	
+	n <- length(TSP$nodes[,'x'])
+	X <- TSP$nodes[,'x']
+	Y <- TSP$nodes[,'y']
+	
+	# Trouver wini
+	w <- 1
+	for (i in 2:n) {
+		if (Y[i] < Y[w]) {
+			w <- i
+		}
+	}
+	# Dans w on a l'indice du premier noeud
+	
+	# l'angle min à respecter
+	Oini <- 0
+	# Le point initial A prend la valeur initiale w
+	A <- w
+	# B prend 0 pour permettre une première itération
+	B <- 0
+	# On ajoute w à la liste de noeud
+	T <- c(w)
+	
+	while (B != w) {
+		B <- A
+		O <- Inf
+		for (i in (1:n)[1:n != A]) {
+			# calcul l'ange entre DAB
+			# zd - zA
+			ALPHA <- c(1,0)
+			BETA <- c(X[i]-X[A],Y[i]-Y[A])
+			GAMMA <- c(
+				(ALPHA[1]*BETA[1]+ALPHA[2]*BETA[2])/(BETA[1]^2+BETA[2]^2),
+				(ALPHA[1]*ALPHA[2]-BETA[1]*BETA[2])/(BETA[1]^2+BETA[2]^2)
+			)
+			if (GAMMA[2] == 0 & GAMMA[1] < 0) {
+				ARGAMMA <- pi
+			} else if (GAMMA[1] == 0 & GAMMA[2] == 0) {
+				ARGAMMA <- 0
+			} else {
+				ARGAMMA <- 2 * atan(GAMMA[2]/(GAMMA[1]*sqrt(GAMMA[1]^2+GAMMA[2]^2)))
+			}
+			
+			if (ARGAMMA < O & ARGAMMA > Omin) {
+				O <- ARGAMMA
+				B <- i
+			}
+		}
+		
+		Omin <- O
+		T <- c(T, B)
+		A <- B
+	}
+	return(T)
+}
+```
 
-# Exemple
+# Exemple Shamos
+
+```{r}
+tsp <- generer_TSP()
+afficher_plan(tsp)
+```
+
+```{r}
+T <- enveloppe_convexe(tsp, info = TRUE); T
+```
+
+# Exemple PPV
 
 ```{r}
 tsp <- generer_TSP()
